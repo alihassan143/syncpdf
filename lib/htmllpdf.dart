@@ -18,6 +18,7 @@ class WidgetsHTMLDecoder {
   late PdfPage page;
   PdfTextElement textElement = PdfTextElement(text: "");
   late PdfTextLayoutResult layoutResult;
+  String lastString = "";
 
   /// Fallback fonts
 
@@ -27,7 +28,7 @@ class WidgetsHTMLDecoder {
     page = pdfdocument.pages.add();
     layoutResult = textElement.draw(
             page: page,
-            bounds: Rect.fromLTWH(0, 50, page.getClientSize().width, 100))!
+            bounds: Rect.fromLTWH(0, 0, page.getClientSize().width, 100))!
         as PdfTextLayoutResult;
 
     /// Parse the HTML document using the html package
@@ -56,34 +57,15 @@ class WidgetsHTMLDecoder {
       if (domNode is dom.Element) {
         final localName = domNode.localName;
         if (localName == HTMLTags.br) {
-          textElement = PdfTextElement(text: "\n", format: PdfStringFormat());
-          layoutResult = textElement.draw(
-              page: page,
-              bounds: Rect.fromLTWH(
-                  layoutResult.lastLineBounds?.right ?? 0,
-                  10,
-                  page.getClientSize().width -
-                      (layoutResult.lastLineBounds?.right ?? 0),
-                  100))! as PdfTextLayoutResult;
+          _drawText(text: "\n", styles: []);
         } else if (HTMLTags.formattingElements.contains(localName)) {
           /// Check if the element is a simple formatting element like <span>, <bold>, or <italic>
           final attributes = _parserFormattingElementAttributes(domNode);
-
-          textElement = PdfTextElement(
+          _drawText(
+              text: domNode.text,
               brush: attributes.$3,
-              format: PdfStringFormat(
-                  alignment: attributes.$2 ?? PdfTextAlignment.left),
-              font: PdfStandardFont(PdfFontFamily.timesRoman, 12,
-                  multiStyle: attributes.$1),
-              text: domNode.text.replaceAll(RegExp(r'\n+$'), ''));
-          layoutResult = textElement.draw(
-              page: page,
-              bounds: Rect.fromLTWH(
-                  layoutResult.lastLineBounds?.right ?? 0,
-                  10,
-                  page.getClientSize().width -
-                      (layoutResult.lastLineBounds?.right ?? 0),
-                  100))! as PdfTextLayoutResult;
+              alignment: attributes.$2,
+              styles: attributes.$1);
         } else if (HTMLTags.specialElements.contains(localName)) {
           await _parseSpecialElements(
             domNode,
@@ -93,15 +75,7 @@ class WidgetsHTMLDecoder {
           /// Handle special elements (e.g., headings, lists, images)
         }
       } else if (domNode is dom.Text) {
-        textElement = PdfTextElement(text: domNode.text);
-        layoutResult = textElement.draw(
-            page: page,
-            bounds: Rect.fromLTWH(
-                layoutResult.lastLineBounds?.right ?? 0,
-                10,
-                page.getClientSize().width -
-                    (layoutResult.lastLineBounds?.right ?? 0),
-                100))! as PdfTextLayoutResult;
+        _drawText(text: domNode.text, styles: []);
 
         /// Process text nodes and add them to delta
       } else {
@@ -376,6 +350,73 @@ class WidgetsHTMLDecoder {
   //   return result;
   // }
 
+  void _moveToNextLine() {
+    // Move to the next line by adjusting the Y-coordinate
+    layoutResult = textElement.draw(
+      page: page,
+      bounds: Rect.fromLTWH(
+        0, // Start at the left edge of the page
+        layoutResult.bounds.bottom + 10, // Move to the next line
+        page.getClientSize().width, // Use the full width of the page
+        100, // Height can be adjusted as needed
+      ),
+    ) as PdfTextLayoutResult;
+  }
+
+  void _drawText({
+    required String text,
+    PdfBrush? brush,
+    PdfTextAlignment? alignment,
+    required List<PdfFontStyle> styles,
+    double fontSize = 12,
+  }) {
+    final double availableWidth = page.getClientSize().width;
+
+    // Create a new PdfTextElement for the current text
+    final PdfTextElement newTextElement = PdfTextElement(
+      brush: brush,
+      format: PdfStringFormat(alignment: alignment ?? PdfTextAlignment.left),
+      font: PdfStandardFont(PdfFontFamily.timesRoman, fontSize,
+          multiStyle: styles),
+      text: text,
+    );
+
+    // Calculate the width of the new text
+    final double textWidth = newTextElement.font.measureString(text).width;
+
+    // Calculate the remaining width on the current line
+    final double remainingWidth = availableWidth - layoutResult.bounds.right;
+
+    // Check if the text fits within the remaining width
+    if (textWidth <= remainingWidth) {
+      // If the text fits within the remaining width, draw it on the same line
+      layoutResult = newTextElement.draw(
+        page: page,
+        bounds: Rect.fromLTWH(
+          layoutResult.bounds.right,
+          layoutResult.bounds.top,
+          textWidth,
+          100, // Height can be adjusted as needed
+        ),
+      ) as PdfTextLayoutResult;
+    } else {
+   
+      // If the text does not fit within the remaining width, move to the next line
+      _moveToNextLine();
+
+      // Draw the text on the new line
+      layoutResult = newTextElement.draw(
+        page: page,
+        bounds: Rect.fromLTWH(
+          0,
+          layoutResult.bounds.bottom,
+          availableWidth,
+          100, // Height can be adjusted as needed
+        ),
+      ) as PdfTextLayoutResult;
+    }
+  }
+
   /// Function to parse a heading element and return a RichText widget
   void _parseHeadingElement(
     dom.Element element, {
@@ -386,36 +427,18 @@ class WidgetsHTMLDecoder {
       if (child is dom.Element) {
         final attributes = _parserFormattingElementAttributes(child);
 
-        textElement = PdfTextElement(
+        _drawText(
+            text: child.text,
             brush: attributes.$3,
-            format: PdfStringFormat(
-                alignment: attributes.$2 ?? PdfTextAlignment.left),
-            font: PdfStandardFont(
-                PdfFontFamily.timesRoman, level.getHeadingSize,
-                style: PdfFontStyle.bold, multiStyle: attributes.$1),
-            text: child.text.replaceAll(RegExp(r'\n+$'), ''));
-        layoutResult = textElement.draw(
-            page: page,
-            bounds: Rect.fromLTWH(
-                layoutResult.lastLineBounds?.right ?? 0,
-                (layoutResult.lastLineBounds?.top ?? 10) + 20,
-                page.getClientSize().width -
-                    (layoutResult.lastLineBounds?.right ?? 0),
-                100))! as PdfTextLayoutResult;
+            fontSize: level.getHeadingSize,
+            alignment: attributes.$2,
+            styles: attributes.$1);
       } else {
-        textElement = PdfTextElement(
-            font: PdfStandardFont(
-                PdfFontFamily.timesRoman, level.getHeadingSize,
-                style: PdfFontStyle.bold),
-            text: child.text ?? "");
-        layoutResult = textElement.draw(
-            page: page,
-            bounds: Rect.fromLTWH(
-                layoutResult.lastLineBounds?.right ?? 0,
-                (layoutResult.lastLineBounds?.top ?? 10) + 20,
-                page.getClientSize().width -
-                    (layoutResult.lastLineBounds?.right ?? 0),
-                100))! as PdfTextLayoutResult;
+        _drawText(
+          text: child.text ?? "",
+          styles: [PdfFontStyle.bold],
+          fontSize: level.getHeadingSize,
+        );
       }
     }
 
@@ -548,7 +571,6 @@ class WidgetsHTMLDecoder {
   Future<void> _parseDeltaElement(dom.Element element) async {
     final children = element.nodes.toList();
 
-    TextAlign? textAlign;
     for (final child in children) {
       /// Recursively parse child elements
       if (child is dom.Element) {
@@ -564,34 +586,16 @@ class WidgetsHTMLDecoder {
             );
           } else {
             if (child.localName == HTMLTags.br) {
-              textElement = PdfTextElement(text: "\n");
-              layoutResult = textElement.draw(
-                  page: page,
-                  bounds: Rect.fromLTWH(
-                      layoutResult.lastLineBounds?.right ?? 0,
-                      10,
-                      page.getClientSize().width -
-                          (layoutResult.lastLineBounds?.right ?? 0),
-                      100))! as PdfTextLayoutResult;
+              _drawText(text: "\n", styles: []);
             } else {
               /// Parse text and attributes within the paragraph
               final attributes = _parserFormattingElementAttributes(child);
 
-              textElement = PdfTextElement(
+              _drawText(
+                  text: child.text,
                   brush: attributes.$3,
-                  format: PdfStringFormat(
-                      alignment: attributes.$2 ?? PdfTextAlignment.left),
-                  font: PdfStandardFont(PdfFontFamily.timesRoman, 12,
-                      multiStyle: attributes.$1),
-                  text: child.text.replaceAll(RegExp(r'\n+$'), ''));
-              layoutResult = textElement.draw(
-                  page: page,
-                  bounds: Rect.fromLTWH(
-                      layoutResult.lastLineBounds?.right ?? 0,
-                      10,
-                      page.getClientSize().width -
-                          (layoutResult.lastLineBounds?.right ?? 0),
-                      100))! as PdfTextLayoutResult;
+                  alignment: attributes.$2,
+                  styles: attributes.$1);
             }
           }
         }
@@ -599,21 +603,11 @@ class WidgetsHTMLDecoder {
         final attributes =
             _getDeltaAttributesFromHtmlAttributes(element.attributes);
 
-        textElement = PdfTextElement(
+        _drawText(
+            text: child.text ?? '',
             brush: attributes.$3,
-            format: PdfStringFormat(
-                alignment: attributes.$1 ?? PdfTextAlignment.left),
-            font: PdfStandardFont(PdfFontFamily.timesRoman, 12,
-                multiStyle: attributes.$2),
-            text: child.text ?? "");
-        layoutResult = textElement.draw(
-            page: page,
-            bounds: Rect.fromLTWH(
-                layoutResult.lastLineBounds?.right ?? 0,
-                10,
-                page.getClientSize().width -
-                    (layoutResult.lastLineBounds?.right ?? 0),
-                100))! as PdfTextLayoutResult;
+            alignment: attributes.$1,
+            styles: attributes.$2);
       }
     }
 
