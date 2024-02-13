@@ -62,7 +62,7 @@ class WidgetsHTMLDecoder {
           /// Check if the element is a simple formatting element like <span>, <bold>, or <italic>
           final attributes = _parserFormattingElementAttributes(domNode);
           _drawText(
-              text: domNode.text,
+              text: "${domNode.text.replaceAll(RegExp(r'\n+$'), '')} ",
               brush: attributes.$3,
               alignment: attributes.$2,
               styles: attributes.$1);
@@ -373,7 +373,7 @@ class WidgetsHTMLDecoder {
     final double availableWidth = page.getClientSize().width;
 
     // Create a new PdfTextElement for the current text
-    final PdfTextElement newTextElement = PdfTextElement(
+    final newTextElement = PdfTextElement(
       brush: brush,
       format: PdfStringFormat(alignment: alignment ?? PdfTextAlignment.left),
       font: PdfStandardFont(PdfFontFamily.timesRoman, fontSize,
@@ -400,7 +400,6 @@ class WidgetsHTMLDecoder {
         ),
       ) as PdfTextLayoutResult;
     } else {
-   
       // If the text does not fit within the remaining width, move to the next line
       _moveToNextLine();
 
@@ -417,7 +416,7 @@ class WidgetsHTMLDecoder {
     }
   }
 
-  /// Function to parse a heading element and return a RichText widget
+  // /// Function to parse a heading element and return a RichText widget
   void _parseHeadingElement(
     dom.Element element, {
     required int level,
@@ -428,7 +427,7 @@ class WidgetsHTMLDecoder {
         final attributes = _parserFormattingElementAttributes(child);
 
         _drawText(
-            text: child.text,
+            text: "${child.text.replaceAll(RegExp(r'\n+$'), '')} ",
             brush: attributes.$3,
             fontSize: level.getHeadingSize,
             alignment: attributes.$2,
@@ -592,7 +591,7 @@ class WidgetsHTMLDecoder {
               final attributes = _parserFormattingElementAttributes(child);
 
               _drawText(
-                  text: child.text,
+                  text: "${child.text.replaceAll(RegExp(r'\n+$'), '')} ",
                   brush: attributes.$3,
                   alignment: attributes.$2,
                   styles: attributes.$1);
@@ -604,7 +603,7 @@ class WidgetsHTMLDecoder {
             _getDeltaAttributesFromHtmlAttributes(element.attributes);
 
         _drawText(
-            text: child.text ?? '',
+            text: child.text?.replaceAll(RegExp(r'\n+$'), '') ?? "",
             brush: attributes.$3,
             alignment: attributes.$1,
             styles: attributes.$2);

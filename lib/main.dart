@@ -162,7 +162,6 @@ class _MyHomePageState extends State<MyHomePage> {
         await WidgetsHTMLDecoder().convert('''<h1>AppFlowyEditor</h1>
 <h2> <strong>Welcome to</strong> <strong><em><a href="appflowy.io">AppFlowy Editor</a></em></strong></h2>
   <p>AppFlowy Editor is a <strong>highly customizable</strong> <em>rich-text editor</em></p>
-<hr />
 <p><u>Here</u> is an example <del>your</del> you can give a try</p>
 <br>
 <span style="font-weight: bold;background-color: #cccccc;font-style: italic;">Span element</span>
