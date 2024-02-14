@@ -61,6 +61,7 @@ class WidgetsHTMLDecoder {
         } else if (HTMLTags.formattingElements.contains(localName)) {
           /// Check if the element is a simple formatting element like <span>, <bold>, or <italic>
           final attributes = _parserFormattingElementAttributes(domNode);
+
           _drawText(
               text: "${domNode.text.replaceAll(RegExp(r'\n+$'), '')} ",
               brush: attributes.$3,
@@ -158,14 +159,7 @@ class WidgetsHTMLDecoder {
 
   void paragraphNode({required String text}) {
     //     style: attributes.$2));
-    textElement = PdfTextElement(text: text.replaceAll(RegExp(r'\n+$'), ''));
-    layoutResult = textElement.draw(
-        page: page,
-        bounds: Rect.fromLTWH(
-            layoutResult.lastLineBounds!.right,
-            10,
-            page.getClientSize().width - layoutResult.lastLineBounds!.right,
-            100))! as PdfTextLayoutResult;
+    _drawText(text: text.replaceAll(RegExp(r'\n+$'), ''), styles: []);
   }
 
   //// Parses the attributes of a formatting element and returns a TextStyle.
@@ -351,12 +345,15 @@ class WidgetsHTMLDecoder {
   // }
 
   void _moveToNextLine() {
+    textElement = PdfTextElement(
+      text: "\n",
+    );
     // Move to the next line by adjusting the Y-coordinate
     layoutResult = textElement.draw(
       page: page,
       bounds: Rect.fromLTWH(
         0, // Start at the left edge of the page
-        layoutResult.bounds.bottom + 10, // Move to the next line
+        layoutResult.lastLineBounds!.bottom + 10, // Move to the next line
         page.getClientSize().width, // Use the full width of the page
         100, // Height can be adjusted as needed
       ),
@@ -370,50 +367,30 @@ class WidgetsHTMLDecoder {
     required List<PdfFontStyle> styles,
     double fontSize = 12,
   }) {
+    if (text.isEmpty || text.contains("\n")) {
+      _moveToNextLine();
+    }
+
     final double availableWidth = page.getClientSize().width;
 
     // Create a new PdfTextElement for the current text
-    final newTextElement = PdfTextElement(
+    textElement = PdfTextElement(
       brush: brush,
       format: PdfStringFormat(alignment: alignment ?? PdfTextAlignment.left),
       font: PdfStandardFont(PdfFontFamily.timesRoman, fontSize,
           multiStyle: styles),
-      text: text,
+      text: " $text",
     );
 
-    // Calculate the width of the new text
-    final double textWidth = newTextElement.font.measureString(text).width;
-
-    // Calculate the remaining width on the current line
-    final double remainingWidth = availableWidth - layoutResult.bounds.right;
-
-    // Check if the text fits within the remaining width
-    if (textWidth <= remainingWidth) {
-      // If the text fits within the remaining width, draw it on the same line
-      layoutResult = newTextElement.draw(
-        page: page,
-        bounds: Rect.fromLTWH(
-          layoutResult.bounds.right,
-          layoutResult.bounds.top,
-          textWidth,
-          100, // Height can be adjusted as needed
-        ),
-      ) as PdfTextLayoutResult;
-    } else {
-      // If the text does not fit within the remaining width, move to the next line
-      _moveToNextLine();
-
-      // Draw the text on the new line
-      layoutResult = newTextElement.draw(
-        page: page,
-        bounds: Rect.fromLTWH(
-          0,
-          layoutResult.bounds.bottom,
-          availableWidth,
-          100, // Height can be adjusted as needed
-        ),
-      ) as PdfTextLayoutResult;
-    }
+    layoutResult = textElement.draw(
+      page: page,
+      bounds: Rect.fromLTWH(
+        layoutResult.lastLineBounds!.right,
+        layoutResult.lastLineBounds!.top,
+        availableWidth,
+        100, // Height can be adjusted as needed
+      ),
+    ) as PdfTextLayoutResult;
   }
 
   // /// Function to parse a heading element and return a RichText widget
